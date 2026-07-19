@@ -1,0 +1,37 @@
+{
+  "name": "auth",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start:prod": "node dist/index.js",
+    "dev": "concurrently \"tsc --watch\" \"nodemon dist/index.js\"",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@prisma/client": "^6.19.0",
+    "@types/multer": "^2.2.0",
+    "bcrypt": "^6.0.0",
+    "datauri": "^4.1.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "http-status-codes": "^2.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "concurrently": "^10.0.3",
+    "prisma": "^6.19.0",
+    "typescript": "^5.9.2"
+  }
+}
