@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
     provider = "postgresql"
+    url      = env("DB_URI")
 }
 
 enum UserRole {
@@ -12,7 +13,7 @@ enum UserRole {
     ADMIN
 }
 
-model User {
+model Auth {
     userId             String      @id @default(uuid()) @map("user_id")
     name               String
     email              String      @unique
@@ -28,7 +29,7 @@ model User {
     subscription       DateTime?
     userSkills         UserSkill[]
 
-    @@map("users")
+    @@map("auths")
 }
 
 model Skill {
@@ -43,7 +44,7 @@ model UserSkill {
     userId  String @map("user_id")
     skillId String @map("skill_id")
 
-    user  User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+    auth  Auth  @relation(fields: [userId], references: [userId], onDelete: Cascade)
     skill Skill @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
 
     @@id([userId, skillId])
