@@ -3,7 +3,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const port = process.env.PORT || 5000;
 
-app.listen(process.env.PORT || 5000, () => {
-  console.log("Auth service is running on port " + (process.env.PORT || 3000));
+app.listen(port, () => {
+  console.log("Auth service is running on port " + port);
 });
+

@@ -1,0 +1,8 @@
+.env
+*.env
+auth/.env
+user/.env
+utils/.env
+
+
+*md

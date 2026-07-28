@@ -3,8 +3,11 @@ import prisma from "../utils/prisma.js";
 import AppError from "../utils/errorHandler.js";
 import { StatusCodes } from "http-status-codes";
 import bcrypt from "bcrypt";
-import getBufferFromFile from "../utils/buffer.js";
 import jwt, { SignOptions } from "jsonwebtoken";
+import uploadResume from "../utils/uploadResume.js";
+import { UpdateAuthProfilePayload } from "../types/index.js";
+
+
 
 const normalizeRole = (role: string): UserRole => {
   const normalizedRole = role.trim().toUpperCase();
@@ -27,39 +30,45 @@ const normalizeRole = (role: string): UserRole => {
   );
 };
 
-const uploadResume = async (file: Express.Multer.File) => {
-  const uploadServiceBaseUrl =
-    process.env.UPLOAD_SERVICE || "http://localhost:5001";
-    
-  const fileBuffer = getBufferFromFile(file);
-
-  const response = await fetch(`${uploadServiceBaseUrl}/api/utils/upload`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+const authProfileSelect = {
+  userId: true,
+  name: true,
+  email: true,
+  phoneNumber: true,
+  role: true,
+  bio: true,
+  resume: true,
+  resumePublicId: true,
+  profilePic: true,
+  profilePicPublicId: true,
+  createdAt: true,
+  subscription: true,
+  userSkills: {
+    select: {
+      skill: {
+        select: { skillId: true, name: true },
+      },
     },
-    body: JSON.stringify({
-      buffer: fileBuffer.toString(),
-    }),
+  },
+} as const;
+
+const normalizeSkills = (skills: string[]) => {
+  if (!Array.isArray(skills)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "userSkills must be an array");
+  }
+
+  const normalizedSkills = skills.map((skill) => {
+    if (typeof skill !== "string") {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        "Each user skill must be a string",
+      );
+    }
+
+    return skill.trim();
   });
 
-  if (!response.ok) {
-    throw new AppError(
-      StatusCodes.BAD_GATEWAY,
-      "Failed to upload resume to upload service",
-    );
-  }
-
-  const data = (await response.json()) as { url: string; public_id: string };
-
-  if (!data.url || !data.public_id) {
-    throw new AppError(
-      StatusCodes.BAD_GATEWAY,
-      "Invalid upload service response",
-    );
-  }
-
-  return data;
+  return [...new Set(normalizedSkills)].filter(Boolean);
 };
 
 const registerUserIntoDB = async (
@@ -134,16 +143,18 @@ const registerUserIntoDB = async (
     },
   });
 
+
   const options: SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN || "1h") as SignOptions["expiresIn"],
   };
 
   const token = jwt.sign(
-    { id: result.userId },
+    { id: result.userId, role: result.role },
     process.env.JWT_SECRET!,
     options,
   );
   return { user: result, token };
+
 };
 
 const loginUserIntoDB = async (payload: Pick<Auth, "email" | "password">) => {
@@ -191,7 +202,7 @@ const loginUserIntoDB = async (payload: Pick<Auth, "email" | "password">) => {
     options,
   );
 
-  const { password: _, ...userWithoutPassword } = user;
+  const { password: _, ...userWithoutPassword } = await user;
 
   return {
     user: userWithoutPassword,
@@ -199,7 +210,117 @@ const loginUserIntoDB = async (payload: Pick<Auth, "email" | "password">) => {
   };
 };
 
+const updateAuthProfileInDb = async (payload: UpdateAuthProfilePayload) => {
+  if (!payload.userId) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required to update auth profile');
+  }
+
+  const data: Record<string, string | Date | null> = {};
+
+  if (payload.name !== undefined) data.name = payload.name;
+  if (payload.phoneNumber !== undefined) data.phoneNumber = payload.phoneNumber;
+  if (payload.bio !== undefined) data.bio = payload.bio;
+  if (payload.resume !== undefined) data.resume = payload.resume;
+  if (payload.resumePublicId !== undefined) data.resumePublicId = payload.resumePublicId;
+  if (payload.profilePic !== undefined) data.profilePic = payload.profilePic;
+  if (payload.profilePicPublicId !== undefined) data.profilePicPublicId = payload.profilePicPublicId;
+  if (payload.subscription !== undefined) {
+    data.subscription = payload.subscription ? new Date(payload.subscription) : null;
+  }
+
+  const skills =
+    payload.userSkills !== undefined ? normalizeSkills(payload.userSkills) : undefined;
+
+  if (Object.keys(data).length === 0 && skills === undefined) {
+    throw new AppError(StatusCodes.BAD_REQUEST, 'No profile fields provided to update');
+  }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const currentUser = await tx.auth.findUnique({
+      where: { userId: payload.userId },
+      select: { userId: true },
+    });
+
+    if (!currentUser) {
+      throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+    }
+
+    if (Object.keys(data).length > 0) {
+      await tx.auth.update({
+        where: { userId: payload.userId },
+        data,
+      });
+    }
+
+    if (skills !== undefined) {
+      await tx.userSkill.deleteMany({
+        where: { userId: payload.userId },
+      });
+
+      for (const skillName of skills) {
+        const skill = await tx.skill.upsert({
+          where: { name: skillName },
+          update: {},
+          create: { name: skillName },
+          select: { skillId: true },
+        });
+
+        await tx.userSkill.create({
+          data: {
+            userId: payload.userId,
+            skillId: skill.skillId,
+          },
+        });
+      }
+    }
+
+    return tx.auth.findUnique({
+      where: { userId: payload.userId },
+      select: authProfileSelect,
+    });
+  });
+
+  return user;
+};
+
+const getMyProfileFromDb = async (userId: string) => {
+  const user = await prisma.auth.findUnique({
+    where: { userId },
+    select: authProfileSelect,
+  });
+
+  if (!user) {
+    throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  return user;
+};
+
+const getAllUsersFromDb = async () => {
+  return prisma.auth.findMany({
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: authProfileSelect,
+  });
+};
+
+const updateMyProfileInDb = async (
+  userId: string,
+  payload: Omit<UpdateAuthProfilePayload, "userId">,
+) => {
+  return updateAuthProfileInDb({
+    ...payload,
+    userId,
+  });
+};
+
+
 export const authServices = {
   registerUserIntoDB,
   loginUserIntoDB,
+  updateAuthProfileInDb,
+  getMyProfileFromDb,
+  getAllUsersFromDb,
+  updateMyProfileInDb,
 };

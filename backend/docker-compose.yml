@@ -1,0 +1,92 @@
+services:
+  auth-db:
+    image: postgres:17-alpine
+    container_name: job-portal-auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth_password
+      POSTGRES_DB: auth_db
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  user-db:
+    image: postgres:17-alpine
+    container_name: job-portal-user-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user_password
+      POSTGRES_DB: user_db
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d user_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth:
+    build:
+      context: ./auth
+    container_name: job-portal-auth
+    restart: unless-stopped
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      user:
+        condition: service_started
+      utils:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_URI: postgresql://auth:auth_password@auth-db:5432/auth_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change_this_auth_jwt_secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      USER_SYNC_SECRET: ${USER_SYNC_SECRET:-change_this_user_sync_secret}
+      USER_SERVICE_URL: http://user:5002
+      UPLOAD_SERVICE: http://utils:5001
+    ports:
+      - "${AUTH_HOST_PORT:-5021}:5000"
+
+  utils:
+    build:
+      context: ./utils
+    container_name: job-portal-utils
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-your_cloudinary_cloud_name}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-your_cloudinary_api_key}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-your_cloudinary_api_secret}
+    ports:
+      - "${UTILS_HOST_PORT:-5022}:5001"
+
+  user:
+    build:
+      context: ./user
+    container_name: job-portal-user
+    restart: unless-stopped
+    depends_on:
+      user-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5002
+      DB_URI: postgresql://user:user_password@user-db:5432/user_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change_this_auth_jwt_secret}
+      USER_SYNC_SECRET: ${USER_SYNC_SECRET:-change_this_user_sync_secret}
+      AUTH_SERVICE_URL: http://auth:5000
+    ports:
+      - "${USER_HOST_PORT:-5023}:5002"
+
+volumes:
+  auth-db-data:
+  user-db-data:

@@ -1,0 +1,33 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DB_URI")
+}
+
+enum UserRole {
+    JOB_SEEKER
+    RECRUITER
+    ADMIN
+}
+
+model User {
+    userId             String      @id @map("user_id")
+    name               String
+    email              String      @unique
+    phoneNumber        String      @map("phone_number")
+    role               UserRole
+    bio                String?
+    resume             String?
+    resumePublicId     String?     @map("resume_public_id")
+    profilePic         String?     @map("profile_pic")
+    profilePicPublicId String?     @map("profile_pic_public_id")
+    createdAt          DateTime    @default(now()) @map("created_at")
+    subscription       DateTime?
+
+
+    @@map("users")
+}
+

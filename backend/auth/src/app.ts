@@ -1,9 +1,12 @@
 import express from 'express';
+import helmet from 'helmet';
 import authRoutes from './routes/auth.routes.js';
 import AppError from './utils/errorHandler.js';
 import { StatusCodes } from 'http-status-codes';
 
 const app = express();
+
+app.use(helmet());
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);

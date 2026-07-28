@@ -3,7 +3,7 @@ class AppError extends Error {
   public status: "fail" | "error";
   public isOperational: boolean;
 
-  constructor(statusCode: number, message: string, stack = '') {
+  constructor(statusCode: number, message: string, stack = "") {
     super(message);
     this.name = this.constructor.name;
     this.statusCode = statusCode;
