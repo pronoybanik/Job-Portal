@@ -18,6 +18,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/client": "^6.19.0",
     "@types/multer": "^2.2.0",
+    "axios": "^1.18.1",
     "bcrypt": "^6.0.0",
     "datauri": "^4.1.0",
     "dotenv": "^17.4.2",

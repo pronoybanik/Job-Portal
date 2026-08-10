@@ -7,8 +7,6 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import uploadResume from "../utils/uploadResume.js";
 import { UpdateAuthProfilePayload } from "../types/index.js";
 
-
-
 const normalizeRole = (role: string): UserRole => {
   const normalizedRole = role.trim().toUpperCase();
 
@@ -72,10 +70,10 @@ const normalizeSkills = (skills: string[]) => {
 };
 
 const registerUserIntoDB = async (
-  payload: Auth,
+  payload: Auth & { userSkills?: string[] },
   file?: Express.Multer.File,
 ) => {
-  const { name, email, password, phoneNumber, role, bio } = payload;
+  const { name, email, password, phoneNumber, role, bio, userSkills } = payload;
 
   // 1. Validate required fields
   if (!name || !email || !password || !phoneNumber || !role) {
@@ -111,6 +109,22 @@ const registerUserIntoDB = async (
     bio,
   };
 
+  const skills =
+    userSkills !== undefined ? normalizeSkills(userSkills) : undefined;
+
+  if (skills?.length) {
+    userData.userSkills = {
+      create: skills.map((skillName) => ({
+        skill: {
+          connectOrCreate: {
+            where: { name: skillName },
+            create: { name: skillName },
+          },
+        },
+      })),
+    };
+  }
+
   if (normalizedRole === UserRole.JOB_SEEKER && !file) {
     throw new AppError(
       StatusCodes.BAD_REQUEST,
@@ -127,22 +141,8 @@ const registerUserIntoDB = async (
   // 5. Create user and return data (excluding password)
   const result = await prisma.auth.create({
     data: userData,
-    select: {
-      userId: true,
-      name: true,
-      email: true,
-      phoneNumber: true,
-      role: true,
-      bio: true,
-      resume: true,
-      resumePublicId: true,
-      profilePic: true,
-      profilePicPublicId: true,
-      createdAt: true,
-      subscription: true,
-    },
+    select: authProfileSelect,
   });
-
 
   const options: SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN || "1h") as SignOptions["expiresIn"],
@@ -154,7 +154,6 @@ const registerUserIntoDB = async (
     options,
   );
   return { user: result, token };
-
 };
 
 const loginUserIntoDB = async (payload: Pick<Auth, "email" | "password">) => {
@@ -210,79 +209,6 @@ const loginUserIntoDB = async (payload: Pick<Auth, "email" | "password">) => {
   };
 };
 
-const updateAuthProfileInDb = async (payload: UpdateAuthProfilePayload) => {
-  if (!payload.userId) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'User ID is required to update auth profile');
-  }
-
-  const data: Record<string, string | Date | null> = {};
-
-  if (payload.name !== undefined) data.name = payload.name;
-  if (payload.phoneNumber !== undefined) data.phoneNumber = payload.phoneNumber;
-  if (payload.bio !== undefined) data.bio = payload.bio;
-  if (payload.resume !== undefined) data.resume = payload.resume;
-  if (payload.resumePublicId !== undefined) data.resumePublicId = payload.resumePublicId;
-  if (payload.profilePic !== undefined) data.profilePic = payload.profilePic;
-  if (payload.profilePicPublicId !== undefined) data.profilePicPublicId = payload.profilePicPublicId;
-  if (payload.subscription !== undefined) {
-    data.subscription = payload.subscription ? new Date(payload.subscription) : null;
-  }
-
-  const skills =
-    payload.userSkills !== undefined ? normalizeSkills(payload.userSkills) : undefined;
-
-  if (Object.keys(data).length === 0 && skills === undefined) {
-    throw new AppError(StatusCodes.BAD_REQUEST, 'No profile fields provided to update');
-  }
-
-  const user = await prisma.$transaction(async (tx) => {
-    const currentUser = await tx.auth.findUnique({
-      where: { userId: payload.userId },
-      select: { userId: true },
-    });
-
-    if (!currentUser) {
-      throw new AppError(StatusCodes.NOT_FOUND, "User not found");
-    }
-
-    if (Object.keys(data).length > 0) {
-      await tx.auth.update({
-        where: { userId: payload.userId },
-        data,
-      });
-    }
-
-    if (skills !== undefined) {
-      await tx.userSkill.deleteMany({
-        where: { userId: payload.userId },
-      });
-
-      for (const skillName of skills) {
-        const skill = await tx.skill.upsert({
-          where: { name: skillName },
-          update: {},
-          create: { name: skillName },
-          select: { skillId: true },
-        });
-
-        await tx.userSkill.create({
-          data: {
-            userId: payload.userId,
-            skillId: skill.skillId,
-          },
-        });
-      }
-    }
-
-    return tx.auth.findUnique({
-      where: { userId: payload.userId },
-      select: authProfileSelect,
-    });
-  });
-
-  return user;
-};
-
 const getMyProfileFromDb = async (userId: string) => {
   const user = await prisma.auth.findUnique({
     where: { userId },
@@ -305,6 +231,47 @@ const getAllUsersFromDb = async () => {
   });
 };
 
+const updateAuthProfileInDb = async (payload: UpdateAuthProfilePayload) => {
+  if (!payload.userId) {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "User ID is required to update auth profile",
+    );
+  }
+
+  const data: Record<string, string | Date | null> = {};
+
+  if (payload.name !== undefined) data.name = payload.name;
+  if (payload.phoneNumber !== undefined) data.phoneNumber = payload.phoneNumber;
+  if (payload.bio !== undefined) data.bio = payload.bio;
+  if (payload.resume !== undefined) data.resume = payload.resume;
+  if (payload.resumePublicId !== undefined)
+    data.resumePublicId = payload.resumePublicId;
+  if (payload.profilePic !== undefined) data.profilePic = payload.profilePic;
+  if (payload.profilePicPublicId !== undefined)
+    data.profilePicPublicId = payload.profilePicPublicId;
+  if (payload.subscription !== undefined) {
+    data.subscription = payload.subscription
+      ? new Date(payload.subscription)
+      : null;
+  }
+
+  if (Object.keys(data).length === 0) {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "No profile fields provided to update",
+    );
+  }
+
+  const user = await prisma.auth.update({
+    where: { userId: payload.userId },
+    data,
+    select: authProfileSelect,
+  });
+
+  return user;
+};
+
 const updateMyProfileInDb = async (
   userId: string,
   payload: Omit<UpdateAuthProfilePayload, "userId">,
@@ -315,6 +282,79 @@ const updateMyProfileInDb = async (
   });
 };
 
+const addSkillsToUserInDb = async (userId: string, userSkills: string[]) => {
+  const normalizedSkills = normalizeSkills(userSkills);
+
+  const userExists = await prisma.auth.findUnique({
+    where: { userId },
+  });
+
+  if (!userExists) {
+    throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  const user = await prisma.auth.update({
+    where: { userId },
+    data: {
+      userSkills: {
+        create: normalizedSkills.map((skillName) => ({
+          skill: {
+            connectOrCreate: {
+              where: { name: skillName },
+              create: { name: skillName },
+            },
+          },
+        })),
+      },
+    },
+    select: authProfileSelect,
+  });
+
+  return user;
+};
+
+const deleteSkillsFromUserInDb = async (
+  userId: string,
+  userSkills: string[],
+) => {
+  const normalizedSkills = normalizeSkills(userSkills);
+
+  const userExists = await prisma.auth.findUnique({
+    where: { userId },
+  });
+  if (!userExists) {
+    throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  const skills = await prisma.skill.findMany({
+    where: {
+      name: {
+        in: normalizedSkills,
+      },
+    },
+    select: {
+      skillId: true,
+    },
+  });
+
+  const skillIds = skills.map((skill) => skill.skillId);
+
+  const user = await prisma.auth.update({
+    where: { userId },
+    data: {
+      userSkills: {
+        deleteMany: {
+          skillId: {
+            in: skillIds,
+          },
+        },
+      },
+    },
+    select: authProfileSelect,
+  });
+
+  return user;
+};
 
 export const authServices = {
   registerUserIntoDB,
@@ -323,4 +363,6 @@ export const authServices = {
   getMyProfileFromDb,
   getAllUsersFromDb,
   updateMyProfileInDb,
+  addSkillsToUserInDb,
+  deleteSkillsFromUserInDb,
 };

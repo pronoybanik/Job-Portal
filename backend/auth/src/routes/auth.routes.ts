@@ -23,7 +23,10 @@ router.get("/me", auth(), AuthControllers.getMe);
 
 router.get("/users", AuthControllers.getAllUsers);
 
-router.patch("/update/me", auth(), AuthControllers.updateMe);
+router.patch("/update/me", auth(), uploadFile, AuthControllers.updateMe);
 
+router.patch("/add-skills", auth(), AuthControllers.addSkillsToUser);
+
+router.delete("/delete-skills", auth(), AuthControllers.deleteSkillsFromUser);
 
 export default router;
