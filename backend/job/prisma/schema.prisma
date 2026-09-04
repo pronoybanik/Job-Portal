@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url      = env("DB_URI")
+}
+
+// ---------- Enums ----------
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+}
+
+enum WorkLocation {
+  REMOTE
+  ONSITE
+  HYBRID
+}
+
+// ---------- Models ----------
+
+model Company {
+  company_id     Int      @id @default(autoincrement())
+  name           String   @unique
+  description    String
+  website        String
+  logo           String
+  logo_public_id String   @map("logo_public_id")
+  recruiter_id   String   @map("recruiter_id")
+  created_at     DateTime @default(now()) @map("created_at")
+
+  jobs Job[]
+
+  @@map("companies")
+}
+
+model Job {
+  job_id                 Int          @id @default(autoincrement())
+  title                  String
+  description            String
+  salary                 Decimal      @db.Decimal(12, 2)
+  location               String
+  job_type               JobType
+  openings               Int
+  role                   String
+  work_location          WorkLocation
+  company_id             Int
+  posted_by_recruiter_id Int
+  created_at             DateTime     @default(now())
+
+  company      Company       @relation(fields: [company_id], references: [company_id])
+  applications Application[]
+
+  @@map("jobs")
+}
+
+model Application {
+  application_id Int               @id @default(autoincrement())
+  job_id         Int
+  applicant_id   Int
+  status         ApplicationStatus @default(PENDING)
+  resume         String
+  applied_at     DateTime          @default(now())
+  subscribed     Boolean           @default(false)
+
+  job Job @relation(fields: [job_id], references: [job_id])
+
+  @@index([job_id])
+  @@index([applicant_id])
+  @@map("applications")
+}
