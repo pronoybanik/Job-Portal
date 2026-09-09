@@ -9,7 +9,7 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
-app.use('/api/auth', authRoutes);
+app.use('/', authRoutes);
 
 app.use((req, res, next) => {
 	next(new AppError(StatusCodes.NOT_FOUND, `Route not found: ${req.originalUrl}`));

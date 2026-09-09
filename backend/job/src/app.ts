@@ -2,12 +2,12 @@ import express from 'express';
 
 import { StatusCodes } from 'http-status-codes';
 import AppError from './utils/errorHandler.js';
-
+import jobRouter from './routes/job.routes.js'
 
 const app = express();
 app.use(express.json());
 
-// app.use('/api/user', userRoutes);
+app.use('', jobRouter);
 
 app.use((req, res, next) => {
 	next(new AppError(StatusCodes.NOT_FOUND, `Route not found: ${req.originalUrl}`));

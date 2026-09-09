@@ -7,7 +7,7 @@ import userRoutes from './routes/user.routes.js';
 const app = express();
 app.use(express.json());
 
-app.use('/api/user', userRoutes);
+app.use('/', userRoutes);
 
 app.use((req, res, next) => {
 	next(new AppError(StatusCodes.NOT_FOUND, `Route not found: ${req.originalUrl}`));

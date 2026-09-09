@@ -1,4 +1,4 @@
-import { Auth, Prisma, UserRole } from "@prisma/client";
+import {  Auth, Prisma, UserRole } from "@prisma/client";
 import prisma from "../utils/prisma.js";
 import AppError from "../utils/errorHandler.js";
 import { StatusCodes } from "http-status-codes";
@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import uploadResume from "../utils/uploadResume.js";
 import { UpdateAuthProfilePayload } from "../types/index.js";
+import { log } from "console";
 
 const normalizeRole = (role: string): UserRole => {
   const normalizedRole = role.trim().toUpperCase();
@@ -74,6 +75,8 @@ const registerUserIntoDB = async (
   file?: Express.Multer.File,
 ) => {
   const { name, email, password, phoneNumber, role, bio, userSkills } = payload;
+
+  console.log("re payload", payload)
 
   // 1. Validate required fields
   if (!name || !email || !password || !phoneNumber || !role) {

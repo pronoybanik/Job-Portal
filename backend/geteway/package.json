@@ -1,0 +1,24 @@
+{
+  "name": "geteway",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "dev": "concurrently \"tsc --watch\" \"nodemon dist/app.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "concurrently": "^10.0.5",
+    "express": "^5.2.1",
+    "express-http-proxy": "^2.1.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/express-http-proxy": "^1.6.7"
+  }
+}
