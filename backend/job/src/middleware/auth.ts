@@ -4,7 +4,6 @@ import { NextFunction, Request, Response } from 'express';
 import catchAsync from '../utils/catchAsync.js';
 import AppError from '../utils/errorHandler.js';
 import { StatusCodes } from "http-status-codes";
-import prisma from '../utils/prisma.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
@@ -45,12 +44,17 @@ const auth = (...requiredRoles: string[]) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid token payload!');
       }
 
-      // Verify user exists in database
-      const user = await prisma.user.findUnique({
-        where: { userId: id },
-      });
+      const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:5000';
+      let userResponse: globalThis.Response;
+      try {
+        userResponse = await fetch(`${authServiceUrl}/me`, {
+          headers: { Authorization: token },
+        });
+      } catch {
+        throw new AppError(StatusCodes.BAD_GATEWAY, 'Auth service is unavailable');
+      }
 
-      if (!user) {
+      if (!userResponse.ok) {
         throw new AppError(StatusCodes.NOT_FOUND, 'User not found!');
       }
 

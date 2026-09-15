@@ -76,7 +76,7 @@ const registerUserIntoDB = async (
 ) => {
   const { name, email, password, phoneNumber, role, bio, userSkills } = payload;
 
-  console.log("re payload", payload)
+  // console.log("re payload", payload)
 
   // 1. Validate required fields
   if (!name || !email || !password || !phoneNumber || !role) {

@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-
 import AppError from '../utils/errorHandler.js';
+
+// Fixed point window rate limiting
 
 type WindowRateLimitOptions = {
 	windowMs?: number;

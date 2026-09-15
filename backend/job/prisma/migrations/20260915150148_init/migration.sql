@@ -9,12 +9,12 @@ CREATE TYPE "WorkLocation" AS ENUM ('REMOTE', 'ONSITE', 'HYBRID');
 
 -- CreateTable
 CREATE TABLE "companies" (
-    "company_id" SERIAL NOT NULL,
+    "company_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "description" TEXT,
-    "website" TEXT,
-    "logo" TEXT,
-    "logo_public_id" TEXT,
+    "description" TEXT NOT NULL,
+    "website" TEXT NOT NULL,
+    "logo" TEXT NOT NULL,
+    "logo_public_id" TEXT NOT NULL,
     "recruiter_id" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -23,7 +23,7 @@ CREATE TABLE "companies" (
 
 -- CreateTable
 CREATE TABLE "jobs" (
-    "job_id" SERIAL NOT NULL,
+    "job_id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "salary" DECIMAL(12,2) NOT NULL,
@@ -32,8 +32,8 @@ CREATE TABLE "jobs" (
     "openings" INTEGER NOT NULL,
     "role" TEXT NOT NULL,
     "work_location" "WorkLocation" NOT NULL,
-    "company_id" INTEGER NOT NULL,
-    "posted_by_recruiter_id" INTEGER NOT NULL,
+    "company_id" TEXT NOT NULL,
+    "posted_by_recruiter_id" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "jobs_pkey" PRIMARY KEY ("job_id")
@@ -41,9 +41,9 @@ CREATE TABLE "jobs" (
 
 -- CreateTable
 CREATE TABLE "applications" (
-    "application_id" SERIAL NOT NULL,
-    "job_id" INTEGER NOT NULL,
-    "applicant_id" INTEGER NOT NULL,
+    "application_id" TEXT NOT NULL,
+    "job_id" TEXT NOT NULL,
+    "applicant_id" TEXT NOT NULL,
     "status" "ApplicationStatus" NOT NULL DEFAULT 'PENDING',
     "resume" TEXT NOT NULL,
     "applied_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

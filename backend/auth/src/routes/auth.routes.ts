@@ -17,6 +17,7 @@ router.post(
   uploadFile,
   AuthControllers.registerUser,
 );
+
 router.post("/login", authRateLimit, AuthControllers.loginUser);
 
 router.get("/me", auth(), AuthControllers.getMe);

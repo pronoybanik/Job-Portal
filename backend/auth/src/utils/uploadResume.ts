@@ -4,8 +4,7 @@ import AppError from "../utils/errorHandler.js";
 import getBufferFromFile from "./buffer.js";
 
 const uploadResume = async (file: Express.Multer.File) => {
-  const uploadServiceBaseUrl =
-    process.env.UPLOAD_SERVICE || "http://localhost:5001";
+  const uploadServiceBaseUrl = "http://localhost:3000";
 
   const fileBuffer = getBufferFromFile(file);
 
@@ -22,24 +21,23 @@ const uploadResume = async (file: Express.Multer.File) => {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     if (!data.url || !data.public_id) {
       throw new AppError(
         StatusCodes.BAD_GATEWAY,
-        "Invalid upload service response"
+        "Invalid upload service response",
       );
     }
 
     return data;
-    
   } catch (error) {
     if (axios.isAxiosError(error)) {
       throw new AppError(
         StatusCodes.BAD_GATEWAY,
         error.response?.data?.message ||
-          "Failed to upload resume to upload service"
+          "Failed to upload resume to upload service",
       );
     }
 
