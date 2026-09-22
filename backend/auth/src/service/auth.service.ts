@@ -6,7 +6,11 @@ import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import uploadResume from "../utils/uploadResume.js";
 import { UpdateAuthProfilePayload } from "../types/index.js";
-import { log } from "console";
+import {
+  cacheAllUsers,
+  clearAllUsersCache,
+  getCachedAllUsers,
+} from "../cache/cacheAllUser.js";
 
 const normalizeRole = (role: string): UserRole => {
   const normalizedRole = role.trim().toUpperCase();
@@ -147,6 +151,8 @@ const registerUserIntoDB = async (
     select: authProfileSelect,
   });
 
+  await clearAllUsersCache();
+
   const options: SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN || "1h") as SignOptions["expiresIn"],
   };
@@ -226,12 +232,21 @@ const getMyProfileFromDb = async (userId: string) => {
 };
 
 const getAllUsersFromDb = async () => {
-  return prisma.auth.findMany({
+  const cachedUsers = await getCachedAllUsers<
+    Prisma.AuthGetPayload<{ select: typeof authProfileSelect }>
+  >();
+
+  if (cachedUsers) return cachedUsers;
+
+  const users = await prisma.auth.findMany({
     orderBy: {
       createdAt: "desc",
     },
     select: authProfileSelect,
   });
+
+  await cacheAllUsers(users);
+  return users;
 };
 
 const updateAuthProfileInDb = async (payload: UpdateAuthProfilePayload) => {
@@ -271,6 +286,8 @@ const updateAuthProfileInDb = async (payload: UpdateAuthProfilePayload) => {
     data,
     select: authProfileSelect,
   });
+
+  await clearAllUsersCache();
 
   return user;
 };
@@ -312,6 +329,8 @@ const addSkillsToUserInDb = async (userId: string, userSkills: string[]) => {
     },
     select: authProfileSelect,
   });
+
+  await clearAllUsersCache();
 
   return user;
 };
@@ -355,6 +374,8 @@ const deleteSkillsFromUserInDb = async (
     },
     select: authProfileSelect,
   });
+
+  await clearAllUsersCache();
 
   return user;
 };

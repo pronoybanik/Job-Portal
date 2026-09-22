@@ -32,6 +32,49 @@ const getAllCompanies = catchAsync(
   },
 );
 
+const getCompaniesById = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+
+    const result = await jobServices.getCompaniesById(id as string);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Companies retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getJobById = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+
+    const result = await jobServices.getJobById(id as string);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Companies retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getAllCompaniesByRecruiter = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const result = await jobServices.getAllCompaniesByRecruiter(req.user);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Companies retrieved successfully",
+      data: result,
+    });
+  },
+);
+
 const deleteCompany = catchAsync(
   async (req: AuthenticatedRequest, res: Response) => {
     await jobServices.deleteCompany(req.params.companyId as string, req.user);
@@ -87,8 +130,11 @@ const deleteJob = catchAsync(
 export const jobControllers = {
   createCompany,
   getAllCompanies,
+  getAllCompaniesByRecruiter,
   deleteCompany,
   createJob,
   getAllJobs,
   deleteJob,
+  getCompaniesById,
+  getJobById
 };

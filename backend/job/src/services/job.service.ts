@@ -246,6 +246,61 @@ const getAllJobs = async () => {
   });
 };
 
+const getAllCompaniesByRecruiter = async (user: JwtPayload | undefined) => {
+  if (!user?.id) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
+  }
+
+  return prisma.company.findMany({
+    where: {
+      recruiter_id: String(user.id),
+    },
+    orderBy: { created_at: "desc" },
+  });
+};
+
+const getCompaniesById = async (id: string) => {
+  if (!id) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Company id is required");
+  }
+
+  const companyData = await prisma.company.findUnique({
+    where: {
+      company_id: id,
+    },
+    include: {
+      jobs: true,
+    },
+  });
+
+  if (!companyData) {
+    throw new AppError(StatusCodes.NOT_FOUND, "Company not found");
+  }
+
+  return companyData;
+};
+
+const getJobById = async (id: string) => {
+  if (!id) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Job id is required");
+  }
+
+  const jobData = await prisma.job.findUnique({
+    where: {
+      job_id: id,
+    },
+    // include: {
+    //   jobs: true,
+    // },
+  });
+
+  if (!jobData) {
+    throw new AppError(StatusCodes.NOT_FOUND, "Company not found");
+  }
+
+  return jobData;
+};
+
 const deleteJob = async (jobId: string, user: JwtPayload | undefined) => {
   if (!user?.id) {
     throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
@@ -289,4 +344,7 @@ export const jobServices = {
   createJob,
   getAllJobs,
   deleteJob,
+  getAllCompaniesByRecruiter,
+  getCompaniesById,
+  getJobById
 };

@@ -31,10 +31,15 @@ enum WorkLocation {
   HYBRID
 }
 
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
 // ---------- Models ----------
 
 model Company {
-  company_id     String      @id @default(uuid())
+  company_id     String   @id @default(uuid())
   name           String   @unique
   description    String
   website        String
@@ -49,7 +54,7 @@ model Company {
 }
 
 model Job {
-  job_id                 String        @id @default(uuid())
+  job_id                 String       @id @default(uuid())
   title                  String
   description            String
   salary                 Decimal      @db.Decimal(12, 2)
@@ -60,6 +65,7 @@ model Job {
   work_location          WorkLocation
   company_id             String
   posted_by_recruiter_id String
+  is_active              Status       @default(ACTIVE)
   created_at             DateTime     @default(now())
 
   company      Company       @relation(fields: [company_id], references: [company_id])
@@ -69,7 +75,7 @@ model Job {
 }
 
 model Application {
-  application_id String             @id @default(uuid())
+  application_id String            @id @default(uuid())
   job_id         String
   applicant_id   String
   status         ApplicationStatus @default(PENDING)
