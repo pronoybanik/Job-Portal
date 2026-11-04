@@ -1,52 +1,49 @@
+
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DB_URI")
+  provider = "postgresql"
+  url      = env("DB_URI")
 }
 
 enum UserRole {
-    JOB_SEEKER
-    RECRUITER
-    ADMIN
+  JOB_SEEKER
+  RECRUITER
+  ADMIN
 }
 
 model Auth {
-    userId             String      @id @default(uuid()) @map("user_id")
-    name               String
-    email              String      @unique
-    password           String
-    phoneNumber        String      @map("phone_number")
-    role               UserRole
-    bio                String?
-    resume             String?
-    resumePublicId     String?     @map("resume_public_id")
-    profilePic         String?     @map("profile_pic")
-    profilePicPublicId String?     @map("profile_pic_public_id")
-    createdAt          DateTime    @default(now()) @map("created_at")
-    subscription       DateTime?
-    userSkills         UserSkill[]
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(JOB_SEEKER)
 
-    @@map("auths")
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([role])
+  @@index([createdAt])
+  @@map("auths")
 }
 
-model Skill {
-    skillId    String      @id @default(uuid()) @map("skill_id")
-    name       String      @unique
-    userSkills UserSkill[]
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
 
-    @@map("skills")
-}
+  user Auth @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model UserSkill {
-    userId  String @map("user_id")
-    skillId String @map("skill_id")
+  createdAt DateTime @default(now()) @map("created_at")
 
-    auth  Auth  @relation(fields: [userId], references: [userId], onDelete: Cascade)
-    skill Skill @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
-
-    @@id([userId, skillId])
-    @@map("user_skills")
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([userId, revokedAt])
+  @@map("refresh_tokens")
 }

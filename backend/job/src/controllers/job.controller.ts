@@ -127,6 +127,49 @@ const deleteJob = catchAsync(
   },
 );
 
+const applyForJob = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const result = await jobServices.applyForJob(req.body, req.user);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.CREATED,
+      success: true,
+      message: "Application submitted successfully",
+      data: result,
+    });
+  },
+);
+
+const getAllApplicationForJob = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { jobId } = req.params;
+    const result = await jobServices.getAllApplicationForJob(
+      req.user,
+      jobId as string,
+    );
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Applications retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+const getApplications = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const result = await jobServices.getApplicationsByApplicant(req.user);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Job applications retrieved successfully",
+      data: result,
+    });
+  },
+);
+
 export const jobControllers = {
   createCompany,
   getAllCompanies,
@@ -135,6 +178,9 @@ export const jobControllers = {
   createJob,
   getAllJobs,
   deleteJob,
+  applyForJob,
+  getApplications,
   getCompaniesById,
-  getJobById
+  getJobById,
+  getAllApplicationForJob,
 };

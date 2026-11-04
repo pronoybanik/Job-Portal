@@ -40,10 +40,28 @@ router.delete(
   jobControllers.deleteJob,
 );
 
+router.post(
+  "/apply",
+  auth("job_seeker", "JOB_SEEKER"),
+  jobControllers.applyForJob,
+);
+
+router.get(
+  "/applications",
+  auth("job_seeker", "JOB_SEEKER"),
+  jobControllers.getApplications,
+);
+
 router.delete(
   "/:companyId",
   auth("recruiter", "RECRUITER"),
   jobControllers.deleteCompany,
+);
+
+router.get(
+  "/application/:jobId",
+  auth("recruiter", "RECRUITER"),
+  jobControllers.getAllApplicationForJob,
 );
 
 export default router;

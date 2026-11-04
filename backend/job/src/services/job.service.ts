@@ -4,6 +4,7 @@ import { JobType, WorkLocation } from "@prisma/client";
 import AppError from "../utils/errorHandler.js";
 import prisma from "../utils/prisma.js";
 import uploadResume from "../utils/uploadResume.js";
+import { publishJobEvent } from "../producer.js";
 
 type CreateCompanyPayload = {
   name?: string;
@@ -131,6 +132,11 @@ type CreateJobPayload = {
   company_id?: string;
 };
 
+type ApplyForJobPayload = {
+  job_id?: string;
+  resume?: string;
+};
+
 const createJob = async (
   payload: CreateJobPayload,
   user: JwtPayload | undefined,
@@ -222,7 +228,7 @@ const createJob = async (
     );
   }
 
-  return prisma.job.create({
+  const job = await prisma.job.create({
     data: {
       title: title.trim(),
       description: description.trim(),
@@ -237,6 +243,15 @@ const createJob = async (
     },
     include: { company: true },
   });
+
+  await publishJobEvent("job.created", {
+    job_id: job.job_id,
+    title: job.title,
+    company_id: job.company_id,
+    posted_by_recruiter_id: job.posted_by_recruiter_id,
+  });
+
+  return job;
 };
 
 const getAllJobs = async () => {
@@ -301,6 +316,83 @@ const getJobById = async (id: string) => {
   return jobData;
 };
 
+const applyForJob = async (
+  payload: ApplyForJobPayload,
+  user: JwtPayload | undefined,
+) => {
+  if (!user?.id) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
+  }
+
+  if (String(user.role).toUpperCase() !== "JOB_SEEKER") {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      "Forbidden: only job seekers can apply for a job",
+    );
+  }
+
+  const jobId = payload.job_id;
+  if (!isUuid(jobId)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "job_id is required");
+  }
+
+  if (!payload.resume?.trim()) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Resume is required");
+  }
+
+  const job = await prisma.job.findUnique({
+    where: { job_id: jobId },
+    select: { job_id: true, is_active: true },
+  });
+
+  if (!job) {
+    throw new AppError(StatusCodes.NOT_FOUND, "No job found with this id");
+  }
+
+  if (job.is_active !== "ACTIVE") {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Job is not active");
+  }
+
+  const applicantId = String(user.id);
+  const existingApplication = await prisma.application.findFirst({
+    where: { job_id: jobId, applicant_id: applicantId },
+    select: { application_id: true },
+  });
+
+  if (existingApplication) {
+    throw new AppError(
+      StatusCodes.CONFLICT,
+      "You have already applied for this job",
+    );
+  }
+
+  return prisma.application.create({
+    data: {
+      job_id: jobId,
+      applicant_id: applicantId,
+      resume: payload.resume.trim(),
+    },
+  });
+};
+
+const getApplicationsByApplicant = async (user: JwtPayload | undefined) => {
+  if (!user?.id) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
+  }
+
+  return prisma.application.findMany({
+    where: { applicant_id: String(user.id) },
+    orderBy: { applied_at: "desc" },
+    include: {
+      job: {
+        include: {
+          company: true,
+        },
+      },
+    },
+  });
+};
+
 const deleteJob = async (jobId: string, user: JwtPayload | undefined) => {
   if (!user?.id) {
     throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
@@ -337,6 +429,45 @@ const deleteJob = async (jobId: string, user: JwtPayload | undefined) => {
   await prisma.job.delete({ where: { job_id: jobId } });
 };
 
+
+const getAllApplicationForJob = async (user: JwtPayload | undefined , jobId: string) => {
+  if (!user?.id) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
+  }
+
+  if (String(user.role).toUpperCase() !== "RECRUITER") {
+    throw new AppError(StatusCodes.FORBIDDEN, "Recruiter access required");
+  }
+
+  if (!isUuid(jobId)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Invalid job id");
+  }
+
+  const job = await prisma.job.findFirst({
+    where: {
+      job_id: jobId,
+    },
+    select: { job_id: true, posted_by_recruiter_id: true },
+  });
+
+  if (!job) {
+    throw new AppError(StatusCodes.NOT_FOUND, "Job not found");
+  }
+
+  if (job.posted_by_recruiter_id !== String(user.id)) {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      "You can only view applications for your own jobs",
+    );
+  }
+
+  return prisma.application.findMany({
+    where: { job_id: jobId },
+    orderBy: { applied_at: "desc" },
+  });
+
+};
+
 export const jobServices = {
   createCompany,
   getAllCompanies,
@@ -346,5 +477,8 @@ export const jobServices = {
   deleteJob,
   getAllCompaniesByRecruiter,
   getCompaniesById,
-  getJobById
+  getJobById,
+  applyForJob,
+  getApplicationsByApplicant,
+  getAllApplicationForJob,
 };

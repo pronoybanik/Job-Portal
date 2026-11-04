@@ -1,13 +1,11 @@
 import prisma from "../utils/prisma.js";
+import { Prisma } from "@prisma/client";
 import AppError from "../utils/errorHandler.js";
 import { StatusCodes } from "http-status-codes";
 
 type SyncUserProfileInput = {
   userId: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
-  role: "JOB_SEEKER" | "RECRUITER" | "ADMIN";
+  phoneNumber?: string | null;
   bio?: string | null;
   resume?: string | null;
   resumePublicId?: string | null;
@@ -19,7 +17,6 @@ type SyncUserProfileInput = {
 
 type UpdateUserProfileInput = {
   userId: string;
-  name?: string;
   phoneNumber?: string;
   bio?: string | null;
   resume?: string | null;
@@ -27,55 +24,13 @@ type UpdateUserProfileInput = {
   profilePic?: string | null;
   profilePicPublicId?: string | null;
   subscription?: string | Date | null;
-};
-
-type AuthProfileUpdatePayload = UpdateUserProfileInput;
-
-const syncUserProfileToAuthService = async (
-  payload: AuthProfileUpdatePayload,
-) => {
-  const authServiceBaseUrl =
-    process.env.AUTH_SERVICE_URL || "http://localhost:5000"; //auth port is 5000
-  const userSyncSecret = process.env.USER_SYNC_SECRET;
-
-  if (!userSyncSecret) {
-    throw new AppError(
-      StatusCodes.INTERNAL_SERVER_ERROR,
-      "USER_SYNC_SECRET is not configured in user service",
-    );
-  }
-
-  const response = await fetch(`${authServiceBaseUrl}/api/auth/sync`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      "x-service-secret": userSyncSecret,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    let errorMessage = "Failed to sync auth profile to auth service";
-
-    try {
-      const errorBody = (await response.json()) as { message?: string };
-      if (errorBody.message) {
-        errorMessage = errorBody.message;
-      }
-    } catch {
-      // Keep the default message when the response body is not JSON.
-    }
-
-    throw new AppError(StatusCodes.BAD_GATEWAY, errorMessage);
-  }
+  userSkills?: unknown;
 };
 
 const getProfileSelect = {
+  id: true,
   userId: true,
-  name: true,
-  email: true,
   phoneNumber: true,
-  role: true,
   bio: true,
   resume: true,
   resumePublicId: true,
@@ -83,6 +38,16 @@ const getProfileSelect = {
   profilePicPublicId: true,
   subscription: true,
   createdAt: true,
+  userSkills: {
+    select: {
+      skill: {
+        select: {
+          skillId: true,
+          name: true,
+        },
+      },
+    },
+  },
 } as const;
 
 const getUserProfile = async (userId: string) => {
@@ -105,13 +70,52 @@ const getUserProfile = async (userId: string) => {
   return user;
 };
 
+const getAuthProfile = async (authorization: string | undefined) => {
+  if (!authorization) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authorization token is missing");
+  }
+
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || "http://localhost:5000";
+
+  let response: Response;
+  try {
+    response = await fetch(`${authServiceUrl}/me`, {
+      headers: { Authorization: authorization },
+    });
+  } catch {
+    throw new AppError(StatusCodes.BAD_GATEWAY, "Auth service is unavailable");
+  }
+
+  const body = (await response.json()) as {
+    data?: unknown;
+    message?: string;
+  };
+
+  if (!response.ok) {
+    throw new AppError(
+      response.status,
+      body.message || "Failed to retrieve auth profile",
+    );
+  }
+
+  return body.data;
+};
+
+const getMyProfile = async (
+  userId: string,
+  authorization: string | undefined,
+) => {
+  const [profile, authUser] = await Promise.all([
+    getUserProfile(userId),
+    getAuthProfile(authorization),
+  ]);
+
+  return { ...profile, authUser };
+};
+
 const syncUserProfile = async (payload: SyncUserProfileInput) => {
   if (
-    !payload.userId ||
-    !payload.email ||
-    !payload.name ||
-    !payload.phoneNumber ||
-    !payload.role
+    !payload.userId
   ) {
     throw new AppError(
       StatusCodes.BAD_REQUEST,
@@ -130,10 +134,7 @@ const syncUserProfile = async (payload: SyncUserProfileInput) => {
     where: { userId: payload.userId },
     create: {
       userId: payload.userId,
-      name: payload.name,
-      email: payload.email,
-      phoneNumber: payload.phoneNumber,
-      role: payload.role,
+      phoneNumber: payload.phoneNumber ?? null,
       bio: payload.bio ?? null,
       resume: payload.resume ?? null,
       resumePublicId: payload.resumePublicId ?? null,
@@ -143,10 +144,9 @@ const syncUserProfile = async (payload: SyncUserProfileInput) => {
       subscription,
     },
     update: {
-      name: payload.name,
-      email: payload.email,
-      phoneNumber: payload.phoneNumber,
-      role: payload.role,
+      ...(payload.phoneNumber !== undefined
+        ? { phoneNumber: payload.phoneNumber }
+        : {}),
       bio: payload.bio ?? null,
       resume: payload.resume ?? null,
       resumePublicId: payload.resumePublicId ?? null,
@@ -179,96 +179,150 @@ const updateUserProfile = async (payload: UpdateUserProfileInput) => {
     throw new AppError(StatusCodes.NOT_FOUND, "User not found");
   }
 
-  // Build a payload containing only fields provided by caller.
-  const syncPayload: AuthProfileUpdatePayload = {
-    userId: payload.userId,
-  } as AuthProfileUpdatePayload;
-
-  let hasAnyField = false;
-  if (payload.name !== undefined) {
-    syncPayload.name = payload.name;
-    hasAnyField = true;
-  }
-  if (payload.phoneNumber !== undefined) {
-    syncPayload.phoneNumber = payload.phoneNumber;
-    hasAnyField = true;
-  }
-  if (payload.bio !== undefined) {
-    syncPayload.bio = payload.bio;
-    hasAnyField = true;
-  }
-  if (payload.resume !== undefined) {
-    syncPayload.resume = payload.resume;
-    hasAnyField = true;
-  }
-  if (payload.resumePublicId !== undefined) {
-    syncPayload.resumePublicId = payload.resumePublicId;
-    hasAnyField = true;
-  }
-  if (payload.profilePic !== undefined) {
-    syncPayload.profilePic = payload.profilePic;
-    hasAnyField = true;
-  }
+  const data: Prisma.UserUpdateInput = {};
+  if (payload.phoneNumber !== undefined) data.phoneNumber = payload.phoneNumber;
+  if (payload.bio !== undefined) data.bio = payload.bio;
+  if (payload.resume !== undefined) data.resume = payload.resume;
+  if (payload.resumePublicId !== undefined) data.resumePublicId = payload.resumePublicId;
+  if (payload.profilePic !== undefined) data.profilePic = payload.profilePic;
   if (payload.profilePicPublicId !== undefined) {
-    syncPayload.profilePicPublicId = payload.profilePicPublicId;
-    hasAnyField = true;
+    data.profilePicPublicId = payload.profilePicPublicId;
   }
   if (payload.subscription !== undefined) {
-    // keep same shape as input (Auth service can parse string/date/null as needed)
-    syncPayload.subscription = payload.subscription
-      ? new Date(payload.subscription)
-      : null;
-    hasAnyField = true;
+    data.subscription = payload.subscription ? new Date(payload.subscription) : null;
   }
 
-  if (!hasAnyField) {
+  const hasSkillsUpdate = payload.userSkills !== undefined;
+  if (Object.keys(data).length === 0 && !hasSkillsUpdate) {
     throw new AppError(
       StatusCodes.BAD_REQUEST,
       "No profile fields provided to update",
     );
   }
 
-  try {
-    // Only sync to auth service. Do not modify local user table.
-    await syncUserProfileToAuthService(syncPayload);
-  } catch (error) {
-    throw error instanceof AppError
-      ? error
-      : new AppError(StatusCodes.BAD_GATEWAY, "Failed to sync auth profile");
+  const normalizedSkills = hasSkillsUpdate
+    ? normalizeSkills(payload.userSkills)
+    : undefined;
+
+  return prisma.$transaction(async (transaction) => {
+    if (normalizedSkills) {
+      await transaction.userSkill.deleteMany({ where: { userId: payload.userId } });
+
+      for (const name of normalizedSkills) {
+        const skill = await transaction.skill.upsert({
+          where: { name },
+          create: { name },
+          update: {},
+        });
+        await transaction.userSkill.create({
+          data: { userId: payload.userId, skillId: skill.skillId },
+        });
+      }
+    }
+
+    return transaction.user.update({
+      where: { userId: payload.userId },
+      data,
+      select: getProfileSelect,
+    });
+  });
+};
+
+const normalizeSkills = (skills: unknown): string[] => {
+  if (!Array.isArray(skills)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "userSkills must be an array");
   }
 
-  // Return the merged view (DB unchanged): prefer payload values when provided.
-  const merged = {
-    ...currentUser,
-    ...(payload.name !== undefined ? { name: payload.name } : {}),
-    ...(payload.phoneNumber !== undefined
-      ? { phoneNumber: payload.phoneNumber }
-      : {}),
-    ...(payload.bio !== undefined ? { bio: payload.bio } : {}),
-    ...(payload.resume !== undefined ? { resume: payload.resume } : {}),
-    ...(payload.resumePublicId !== undefined
-      ? { resumePublicId: payload.resumePublicId }
-      : {}),
-    ...(payload.profilePic !== undefined
-      ? { profilePic: payload.profilePic }
-      : {}),
-    ...(payload.profilePicPublicId !== undefined
-      ? { profilePicPublicId: payload.profilePicPublicId }
-      : {}),
-    ...(payload.subscription !== undefined
-      ? {
-          subscription: payload.subscription
-            ? new Date(payload.subscription)
-            : null,
-        }
-      : {}),
-  } as const;
-
-  return merged;
+  return [...new Set(skills.map((skill) => {
+    if (typeof skill !== "string") {
+      throw new AppError(StatusCodes.BAD_REQUEST, "Each user skill must be a string");
+    }
+    return skill.trim();
+  }).filter(Boolean))];
 };
+
+const addSkillsToUser = async (userId: string, skills: unknown) => {
+  const normalizedSkills = normalizeSkills(skills);
+  const user = await prisma.user.findUnique({ where: { userId } });
+  if (!user) throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+
+  await prisma.$transaction(async (transaction) => {
+    for (const name of normalizedSkills) {
+      const skill = await transaction.skill.upsert({
+        where: { name },
+        create: { name },
+        update: {},
+      });
+      await transaction.userSkill.upsert({
+        where: { userId_skillId: { userId, skillId: skill.skillId } },
+        create: { userId, skillId: skill.skillId },
+        update: {},
+      });
+    }
+  });
+
+  return getUserProfile(userId);
+};
+
+const deleteSkillsFromUser = async (userId: string, skills: unknown) => {
+  const normalizedSkills = normalizeSkills(skills);
+  const user = await prisma.user.findUnique({ where: { userId } });
+  if (!user) throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+
+  const matchingSkills = await prisma.skill.findMany({
+    where: { name: { in: normalizedSkills } },
+    select: { skillId: true },
+  });
+
+  await prisma.userSkill.deleteMany({
+    where: {
+      userId,
+      skillId: { in: matchingSkills.map(({ skillId }) => skillId) },
+    },
+  });
+
+  return getUserProfile(userId);
+};
+
+const getApplicationsIntoDB = async (authorization: string | undefined) => {
+  if (!authorization) {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "Authorization token is missing",
+    );
+  }
+
+  const jobServiceBaseUrl =
+    process.env.JOB_SERVICE_URL || "http://localhost:5003";
+
+  let response: Response;
+  try {
+    response = await fetch(`${jobServiceBaseUrl}/applications`, {
+      headers: { Authorization: authorization },
+    });
+  } catch {
+    throw new AppError(StatusCodes.BAD_GATEWAY, "Job service is unavailable");
+  }
+
+  const responseBody = await response.json();
+
+  if (!response.ok) {
+    throw new AppError(
+      response.status,
+      responseBody?.message || "Failed to retrieve job applications",
+    );
+  }
+
+  return responseBody.data;
+};
+
 
 export const userServices = {
   getUserProfile,
+  getMyProfile,
   syncUserProfile,
   updateUserProfile,
+  addSkillsToUser,
+  deleteSkillsFromUser,
+  getApplicationsIntoDB
 };

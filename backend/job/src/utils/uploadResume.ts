@@ -24,9 +24,6 @@ const uploadResume = async (file: Express.Multer.File) => {
       },
     );
 
-    console.log("image data");
-    
-
     if (!data.url || !data.public_id) {
       throw new AppError(
         StatusCodes.BAD_GATEWAY,

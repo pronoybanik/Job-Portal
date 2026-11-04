@@ -4,7 +4,6 @@ import { NextFunction, Request, Response } from 'express';
 import catchAsync from '../utils/catchAsync.js';
 import AppError from '../utils/errorHandler.js';
 import { StatusCodes } from "http-status-codes";
-import prisma from '../utils/prisma.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
@@ -43,15 +42,6 @@ const auth = (...requiredRoles: string[]) => {
 
       if (!id) {
         throw new AppError(StatusCodes.UNAUTHORIZED, 'Invalid token payload!');
-      }
-
-      // Verify user exists in database
-      const user = await prisma.user.findUnique({
-        where: { userId: id },
-      });
-
-      if (!user) {
-        throw new AppError(StatusCodes.NOT_FOUND, 'User not found!');
       }
 
       // Check role if required roles are specified

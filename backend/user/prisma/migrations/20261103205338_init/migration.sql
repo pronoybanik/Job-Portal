@@ -1,14 +1,8 @@
--- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('JOB_SEEKER', 'RECRUITER', 'ADMIN');
-
 -- CreateTable
-CREATE TABLE "auths" (
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "password" TEXT NOT NULL,
-    "phone_number" TEXT NOT NULL,
-    "role" "UserRole" NOT NULL,
+    "phone_number" TEXT,
     "bio" TEXT,
     "resume" TEXT,
     "resume_public_id" TEXT,
@@ -17,7 +11,7 @@ CREATE TABLE "auths" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "subscription" TIMESTAMP(3),
 
-    CONSTRAINT "auths_pkey" PRIMARY KEY ("user_id")
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -37,13 +31,13 @@ CREATE TABLE "user_skills" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "auths_email_key" ON "auths"("email");
+CREATE UNIQUE INDEX "users_user_id_key" ON "users"("user_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skills_name_key" ON "skills"("name");
 
 -- AddForeignKey
-ALTER TABLE "user_skills" ADD CONSTRAINT "user_skills_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auths"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_skills" ADD CONSTRAINT "user_skills_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "user_skills" ADD CONSTRAINT "user_skills_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills"("skill_id") ON DELETE CASCADE ON UPDATE CASCADE;

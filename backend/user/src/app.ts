@@ -14,6 +14,7 @@ app.use((req, res, next) => {
 });
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+	console.error(err);
 	const appError =
 		err instanceof AppError
 			? err
@@ -21,7 +22,12 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 	res.status(appError.statusCode).json({
 		success: false,
-		message: appError.message,
+		message:
+			process.env.NODE_ENV === 'development' && !(err instanceof AppError)
+				? err instanceof Error
+					? err.message
+					: 'Something went wrong'
+				: appError.message,
 		error: {
 			statusCode: appError.statusCode,
 			status: appError.status,
@@ -31,4 +37,3 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 export default app;
-

@@ -1,44 +1,39 @@
 services:
-  auth-db:
-    image: postgres:17-alpine
-    container_name: job-portal-auth-db
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: job-portal-kafka
     restart: unless-stopped
+    ports:
+      - "9092:9092"
     environment:
-      POSTGRES_USER: auth
-      POSTGRES_PASSWORD: auth_password
-      POSTGRES_DB: auth_db
-    volumes:
-      - auth-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U auth -d auth_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      KAFKA_NODE_ID: 0
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-  user-db:
-    image: postgres:17-alpine
-    container_name: job-portal-user-db
+  redis:
+    image: redis:7-alpine
+    container_name: job-portal-redis
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: user_password
-      POSTGRES_DB: user_db
+    command: redis-server --requirepass password
+    ports:
+      - "6379:6379"
     volumes:
-      - user-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d user_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - redis-data:/data
 
   auth:
     build:
       context: ./auth
     container_name: job-portal-auth
+    env_file:
+      - ./auth/.env
     restart: unless-stopped
     depends_on:
-      auth-db:
-        condition: service_healthy
       user:
         condition: service_started
       utils:
@@ -46,10 +41,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DB_URI: postgresql://auth:auth_password@auth-db:5432/auth_db?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change_this_auth_jwt_secret}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      USER_SYNC_SECRET: ${USER_SYNC_SECRET:-change_this_user_sync_secret}
       USER_SERVICE_URL: http://user:5002
       UPLOAD_SERVICE: http://utils:5001
     ports:
@@ -59,13 +50,12 @@ services:
     build:
       context: ./utils
     container_name: job-portal-utils
+    env_file:
+      - ./utils/.env
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 5001
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-your_cloudinary_cloud_name}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-your_cloudinary_api_key}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-your_cloudinary_api_secret}
     ports:
       - "${UTILS_HOST_PORT:-5022}:5001"
 
@@ -73,20 +63,58 @@ services:
     build:
       context: ./user
     container_name: job-portal-user
+    env_file:
+      - ./user/.env
     restart: unless-stopped
-    depends_on:
-      user-db:
-        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 5002
-      DB_URI: postgresql://user:user_password@user-db:5432/user_db?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change_this_auth_jwt_secret}
-      USER_SYNC_SECRET: ${USER_SYNC_SECRET:-change_this_user_sync_secret}
       AUTH_SERVICE_URL: http://auth:5000
+      UPLOAD_SERVICE: http://utils:5001
     ports:
       - "${USER_HOST_PORT:-5023}:5002"
 
+  job:
+    build:
+      context: ./job
+    container_name: job-portal-job
+    restart: unless-stopped
+    env_file:
+      - ./job/.env
+    depends_on:
+      kafka:
+        condition: service_started
+      utils:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5003
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: job-service
+      KAFKA_JOB_TOPIC: job-events
+      UPLOAD_SERVICE: http://utils:5001
+    ports:
+      - "${JOB_HOST_PORT:-5024}:5003"
+
+  gateway:
+    build:
+      context: ./geteway
+    container_name: job-portal-gateway
+    restart: unless-stopped
+    depends_on:
+      - auth
+      - utils
+      - user
+      - job
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth:5000
+      UTILS_SERVICE_URL: http://utils:5001
+      USER_SERVICE_URL: http://user:5002
+      JOB_SERVICE_URL: http://job:5003
+    ports:
+      - "${GATEWAY_HOST_PORT:-3000}:3000"
+
 volumes:
-  auth-db-data:
-  user-db-data:
+  redis-data:
