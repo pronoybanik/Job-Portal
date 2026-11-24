@@ -156,6 +156,15 @@ const getMyProfileFromDb = async (id: string) => {
   return user;
 };
 
+const getUserByIdFromDb = async (id: string) => {
+  const user = await prisma.auth.findUnique({
+    where: { id },
+    select: authProfileSelect,
+  });
+  if (!user) throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+  return user;
+};
+
 const getAllUsersFromDb = async () => {
   const cachedUsers = await getCachedAllUsers<
     Prisma.AuthGetPayload<{ select: typeof authProfileSelect }>
@@ -174,5 +183,6 @@ export const authServices = {
   registerUserIntoDB,
   loginUserIntoDB,
   getMyProfileFromDb,
+  getUserByIdFromDb,
   getAllUsersFromDb,
 };

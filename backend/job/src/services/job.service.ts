@@ -1,16 +1,17 @@
 import { JwtPayload } from "jsonwebtoken";
 import { StatusCodes } from "http-status-codes";
-import { JobType, WorkLocation } from "@prisma/client";
+import { ApplicationStatus, JobType, WorkLocation } from "@prisma/client";
 import AppError from "../utils/errorHandler.js";
 import prisma from "../utils/prisma.js";
 import uploadResume from "../utils/uploadResume.js";
-import { publishJobEvent } from "../producer.js";
-
-type CreateCompanyPayload = {
-  name?: string;
-  description?: string;
-  website?: string;
-};
+import { publishJobEvent, publishToTopic } from "../producer.js";
+import { applicationStatusUpdateTemplate } from "../utils/emailTemplate.js";
+import type {
+  CreateJobPayload,
+  ApplyForJobPayload,
+  UpdateApplicationPayload,
+  CreateCompanyPayload,
+} from "../utils/types.js";
 
 const isUuid = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -118,23 +119,6 @@ const deleteCompany = async (
   }
 
   await prisma.company.delete({ where: { company_id: companyId } });
-};
-
-type CreateJobPayload = {
-  title?: string;
-  description?: string;
-  salary?: number | string;
-  location?: string;
-  job_type?: JobType | string;
-  openings?: number | string;
-  role?: string;
-  work_location?: WorkLocation | string;
-  company_id?: string;
-};
-
-type ApplyForJobPayload = {
-  job_id?: string;
-  resume?: string;
 };
 
 const createJob = async (
@@ -375,6 +359,108 @@ const applyForJob = async (
   });
 };
 
+const updateApplication = async (
+  applicationId: string,
+  payload: UpdateApplicationPayload,
+  user: JwtPayload | undefined,
+) => {
+  if (!user?.id) {
+    throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
+  }
+
+  if (String(user.role).toUpperCase() !== "RECRUITER") {
+    throw new AppError(StatusCodes.FORBIDDEN, "Recruiter access required");
+  }
+
+  if (!isUuid(applicationId)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Invalid application id");
+  }
+
+  const status = payload.status;
+  if (
+    !status ||
+    !Object.values(ApplicationStatus).includes(status as ApplicationStatus)
+  ) {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "A valid application status is required",
+    );
+  }
+
+  const application = await prisma.application.findUnique({
+    where: { application_id: applicationId },
+    select: {
+      application_id: true,
+      applicant_id: true,
+      job: {
+        select: {
+          posted_by_recruiter_id: true,
+          title: true,
+        },
+      },
+    },
+  });
+
+  if (!application) {
+    throw new AppError(StatusCodes.NOT_FOUND, "Application not found");
+  }
+
+  if (application.job.posted_by_recruiter_id !== String(user.id)) {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      "You can only update applications for your own jobs",
+    );
+  }
+
+  const updatedApplication = await prisma.application.update({
+    where: { application_id: applicationId },
+    data: { status: status as ApplicationStatus },
+  });
+
+  try {
+    const authServiceUrl =
+      process.env.AUTH_SERVICE_URL || "http://localhost:5000";
+    const applicantResponse = await fetch(
+      `${authServiceUrl}/users/${encodeURIComponent(application.applicant_id)}`,
+    );
+
+    if (applicantResponse.ok) {
+      const applicantBody = (await applicantResponse.json()) as {
+        data?: { email?: string; name?: string };
+      };
+      const applicantEmail = applicantBody.data?.email;
+      const applicantName = applicantBody.data?.name;
+
+      if (applicantEmail) {
+        await publishToTopic(process.env.KAFKA_MAIL_TOPIC || "send-mail", {
+          to: applicantEmail,
+          subject: "Application Update - Job portal",
+          html: applicationStatusUpdateTemplate(
+            application.job.title,
+            status as ApplicationStatus,
+            applicantName,
+          ),
+        });
+      }
+    } else {
+      console.error(
+        `Unable to find applicant ${application.applicant_id} for application status email`,
+      );
+    }
+  } catch (error: unknown) {
+    console.error("Unable to publish application status email event", error);
+  }
+
+  await publishJobEvent("application.status.updated", {
+    application_id: updatedApplication.application_id,
+    applicant_id: updatedApplication.applicant_id,
+    job_id: updatedApplication.job_id,
+    status: updatedApplication.status,
+  });
+
+  return updatedApplication;
+};
+
 const getApplicationsByApplicant = async (user: JwtPayload | undefined) => {
   if (!user?.id) {
     throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
@@ -429,8 +515,10 @@ const deleteJob = async (jobId: string, user: JwtPayload | undefined) => {
   await prisma.job.delete({ where: { job_id: jobId } });
 };
 
-
-const getAllApplicationForJob = async (user: JwtPayload | undefined , jobId: string) => {
+const getAllApplicationForJob = async (
+  user: JwtPayload | undefined,
+  jobId: string,
+) => {
   if (!user?.id) {
     throw new AppError(StatusCodes.UNAUTHORIZED, "Authentication required");
   }
@@ -465,7 +553,6 @@ const getAllApplicationForJob = async (user: JwtPayload | undefined , jobId: str
     where: { job_id: jobId },
     orderBy: { applied_at: "desc" },
   });
-
 };
 
 export const jobServices = {
@@ -479,6 +566,7 @@ export const jobServices = {
   getCompaniesById,
   getJobById,
   applyForJob,
+  updateApplication,
   getApplicationsByApplicant,
   getAllApplicationForJob,
 };

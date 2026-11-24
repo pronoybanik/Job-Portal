@@ -14,15 +14,18 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "multer": "^2.5.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
     "concurrently": "^10.0.3",
     "typescript": "^7.0.2"
   }

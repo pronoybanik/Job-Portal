@@ -3,6 +3,7 @@ import catchAsync from "../utils/catchAsync.js";
 import sendResponse from "../utils/sendResponse.js";
 import { StatusCodes } from "http-status-codes";
 import { AuthenticatedRequest } from "../middleware/auth.js";
+import AppError from "../utils/errorHandler.js";
 
 const registerUser = catchAsync(async (req, res) => {
   const result = await authServices.registerUserIntoDB(req.body);
@@ -49,9 +50,27 @@ const getAllUsers = catchAsync(async (_req, res) => {
   });
 });
 
+const getUserById = catchAsync(async (req, res) => {
+  const userId = Array.isArray(req.params.userId)
+    ? req.params.userId[0]
+    : req.params.userId;
+  if (!userId) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "User id is required");
+  }
+  const result = await authServices.getUserByIdFromDb(userId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "User retrieved successfully",
+    data: result,
+  });
+});
+
 export const AuthControllers = {
   registerUser,
   loginUser,
   getMe,
   getAllUsers,
+  getUserById,
 };

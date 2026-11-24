@@ -52,6 +52,12 @@ router.get(
   jobControllers.getApplications,
 );
 
+router.patch(
+  "/application/:applicationId",
+  auth("recruiter", "RECRUITER"),
+  jobControllers.updateApplication,
+);
+
 router.delete(
   "/:companyId",
   auth("recruiter", "RECRUITER"),
@@ -63,5 +69,7 @@ router.get(
   auth("recruiter", "RECRUITER"),
   jobControllers.getAllApplicationForJob,
 );
+
+
 
 export default router;

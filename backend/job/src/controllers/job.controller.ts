@@ -140,6 +140,23 @@ const applyForJob = catchAsync(
   },
 );
 
+const updateApplication = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const result = await jobServices.updateApplication(
+      req.params.applicationId as string,
+      req.body,
+      req.user,
+    );
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Application updated successfully",
+      data: result,
+    });
+  },
+);
+
 const getAllApplicationForJob = catchAsync(
   async (req: AuthenticatedRequest, res: Response) => {
     const { jobId } = req.params;
@@ -179,6 +196,7 @@ export const jobControllers = {
   getAllJobs,
   deleteJob,
   applyForJob,
+  updateApplication,
   getApplications,
   getCompaniesById,
   getJobById,
